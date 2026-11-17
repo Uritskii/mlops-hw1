@@ -1,17 +1,3 @@
-"""
-Шаг 2 (проверка). Smoke-тесты всех эндпоинтов OIP + имитация фаззинга.
-
-Перед запуском подними сервис (одним из способов):
-    uvicorn app:app --port 8000
-или в контейнере:
-    docker run --rm -p 127.0.0.1:8000:8000 mlops-hw1
-
-Запуск тестов:
-    python test_service.py
-
-Если всё зелёное — сервис готов к сдаче.
-"""
-
 import sys
 import requests
 
@@ -58,7 +44,6 @@ def main():
           .json().get("ready") is True)
 
     # --- 4. Корректный infer ---
-    # Формируем вход по сигнатуре из метаданных: -1 заменяем на батч=1
     shape = [1 if d == -1 else d for d in inp["shape"]]
     size = 1
     for d in shape:

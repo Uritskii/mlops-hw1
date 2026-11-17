@@ -1,19 +1,9 @@
-# CI/CD пайплайн: сборка -> smoke-тест в контейнере -> публикация в ghcr.io
-#
-# Срабатывает на каждый пуш в main.
-# Образ публикуется как ghcr.io/<твой-логин>/<репозиторий>:latest
-#
-# ВАЖНО после первого успешного прогона:
-# GitHub -> твой профиль -> Packages -> <пакет> -> Package settings
-# -> "Change visibility" -> Public. Иначе проверяющий не скачает образ!
-
 name: build-and-publish
 
 on:
   push:
     branches: [main]
 
-# GITHUB_TOKEN создаётся автоматически; даём право писать пакеты
 permissions:
   contents: read
   packages: write
@@ -31,10 +21,10 @@ jobs:
       # --- 2. Smoke-тест: сервис из образа реально отвечает ---
       - name: Smoke test in container
         run: |
-          # Поднимаем контейнер как в проде
+          # Поднимаем контейнер 
           docker run -d --name svc -p 8000:8000 mlops-hw1:test
 
-          # Ждём readiness (модель загружается и прогревается)
+          # Ждём readiness 
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:8000/v2/health/ready; then break; fi
             sleep 2
@@ -57,7 +47,7 @@ jobs:
           docker logs svc
           docker stop svc
 
-      # --- 3. Публикация в GitHub Container Registry ---
+      # --- 3. Публикация в GitHub
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -67,7 +57,6 @@ jobs:
 
       - name: Push image to GHCR
         run: |
-          # Имя образа = ghcr.io/<owner>/<repo>, обязательно в нижнем регистре
           IMAGE=ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')
           docker tag mlops-hw1:test $IMAGE:latest
           docker tag mlops-hw1:test $IMAGE:${{ github.sha }}

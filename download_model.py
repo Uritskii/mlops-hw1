@@ -1,28 +1,9 @@
-"""
-Шаг 1. Скачивание модели MobileNetV2 в формате ONNX.
-
-Зачем ONNX:
-- PyTorch/TensorFlow НЕ входят в белый список зависимостей контейнера,
-  а один torch весит ~800 МБ и не влезет в лимит образа 1 ГБ.
-- onnxruntime весит ~150-200 МБ и быстро работает на CPU.
-
-Модель: MobileNetV2 (~14 МБ), классификация ImageNet на 1000 классов.
-Вход:  тензор float32 [batch, 3, 224, 224] (имя "input")
-Выход: тензор float32 [batch, 1000] (имя "output")
-
-Запуск (локально, НЕ в контейнере):
-    python download_model.py
-
-Результат: файл artifacts/model.onnx
-"""
-
 import os
 import urllib.request
 
 ARTIFACTS_DIR = "artifacts"
 MODEL_PATH = os.path.join(ARTIFACTS_DIR, "model.onnx")
 
-# Источники модели (пробуем по очереди):
 SOURCES = [
     # 1. Официальный ONNX Model Zoo (прямая ссылка на validated-модель)
     "https://github.com/onnx/models/raw/main/validated/vision/classification/mobilenet/model/mobilenetv2-12.onnx",

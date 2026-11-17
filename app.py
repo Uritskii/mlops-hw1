@@ -1,5 +1,4 @@
 """
-HTTP-сервис по спецификации Open Inference Protocol (OIP) v2, REST.
 
 Эндпоинты (спека: github.com/kserve/open-inference-protocol):
   GET  /v2                                         — метаданные сервера
@@ -9,11 +8,6 @@ HTTP-сервис по спецификации Open Inference Protocol (OIP) v2
   GET  /v2/models/{name}[/versions/{ver}]/ready    — готовность модели
   POST /v2/models/{name}[/versions/{ver}]/infer    — инференс
 
-Ключевые решения (по лекции 3):
-- Модель загружается ОДИН раз на процесс через lifespan, затем прогрев.
-- Валидация входа ДО вызова модели: ошибка -> HTTP 400 {"error": ...},
-  процесс не падает (важно для фаззинга).
-- Метаданные inputs/outputs берутся из ONNX-графа, а не хардкодятся.
 """
 
 import os
@@ -31,7 +25,7 @@ from model import ModelBundle, NP_TO_OIP, OIP_TO_NP
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("oip-server")
 
-# --- Константы сервиса (можно переопределить переменными окружения) ---
+# --- Константы сервиса 
 MODEL_PATH = os.environ.get("MODEL_PATH", "artifacts/model.onnx")
 MODEL_NAME = os.environ.get("MODEL_NAME", "mobilenetv2")
 MODEL_VERSION = os.environ.get("MODEL_VERSION", "1")
@@ -40,7 +34,6 @@ SERVER_VERSION = "1.0.0"
 
 # Семафор: не более N одновременных инференсов на процесс.
 # Защита от перегрузки: лишние запросы получают управляемый 503,
-# а не встают в бесконечную очередь и не роняют контейнер по памяти.
 MAX_PARALLEL_INFER = int(os.environ.get("MAX_PARALLEL_INFER", "4"))
 infer_slots = threading.BoundedSemaphore(MAX_PARALLEL_INFER)
 
@@ -57,7 +50,7 @@ async def lifespan(app: FastAPI):
     log.info("Модель загружена и прогрета за %.2f с", time.time() - t0)
 
     app.state.bundle = bundle
-    app.state.ready = True  # readiness-флаг поднимаем ТОЛЬКО после прогрева
+    app.state.ready = True 
     yield
     app.state.ready = False
     app.state.bundle = None
@@ -145,13 +138,13 @@ def server_metadata():
 
 @app.get("/v2/health/live")
 def server_live():
-    # Liveness: процесс жив и может отвечать. Всегда 200, раз дошли сюда.
+
     return {"live": True}
 
 
 @app.get("/v2/health/ready")
 def server_ready():
-    # Readiness: модель загружена и прогрета. До этого — 503.
+   
     if getattr(app.state, "ready", False):
         return {"ready": True}
     return error_response(503, "server is not ready")
@@ -162,7 +155,7 @@ def model_metadata_payload() -> dict:
     return {
         "name": MODEL_NAME,
         "versions": [MODEL_VERSION],
-        "platform": "onnx_onnxv1",  # платформа из списка спеки OIP
+        "platform": "onnx_onnxv1",  
         "inputs": [
             {k: m[k] for k in ("name", "datatype", "shape")}
             for m in bundle.inputs_meta
@@ -174,9 +167,6 @@ def model_metadata_payload() -> dict:
     }
 
 
-# Обрати внимание: FastAPI требует объявить более длинный путь отдельно,
-# иначе {model_name} "съест" и версию. Порядок декораторов не важен,
-# важно, что оба пути ведут в одну функцию.
 @app.get("/v2/models/{model_name}")
 @app.get("/v2/models/{model_name}/versions/{model_version}")
 def model_metadata(model_name: str, model_version: str | None = None):
@@ -203,7 +193,7 @@ async def infer(model_name: str, request: Request, model_version: str | None = N
     if model_version is not None and model_version != MODEL_VERSION:
         return error_response(404, f"model version '{model_version}' not found")
 
-    # --- Разбор и валидация запроса (до вызова модели!) ---
+
     try:
         body = await request.json()
     except Exception:
@@ -236,13 +226,13 @@ async def infer(model_name: str, request: Request, model_version: str | None = N
         outputs = bundle.infer(input_arrays)
         duration_ms = (time.time() - t0) * 1000
     except Exception as e:
-        # Ошибка самого инференса (например, внутри ONNX) -> 500 по спеке
+      
         log.exception("Inference failed")
         return error_response(500, f"inference failed: {e}")
     finally:
         infer_slots.release()
 
-    # --- Какие выходы просили? (поле 'outputs' в запросе опционально) ---
+
     requested = body.get("outputs")
     if requested:
         wanted = {o.get("name") for o in requested}
@@ -251,7 +241,7 @@ async def infer(model_name: str, request: Request, model_version: str | None = N
             return error_response(400, f"unknown outputs requested: {sorted(unknown)}")
         outputs = {k: v for k, v in outputs.items() if k in wanted}
 
-    # --- Ответ по спеке OIP ---
+  
     response_outputs = []
     for name, arr in outputs.items():
         arr = np.asarray(arr)
@@ -260,8 +250,6 @@ async def infer(model_name: str, request: Request, model_version: str | None = N
                 "name": name,
                 "shape": list(arr.shape),
                 "datatype": NP_TO_OIP.get(arr.dtype, "FP32"),
-                # .tolist() даёт вложенный массив; flatten() — плоский.
-                # Оба варианта легальны; плоский компактнее для больших тензоров.
                 "data": arr.flatten().tolist(),
             }
         )
@@ -273,7 +261,6 @@ async def infer(model_name: str, request: Request, model_version: str | None = N
         "model_version": MODEL_VERSION,
         "outputs": response_outputs,
     }
-    # id из запроса обязан вернуться в ответе (спека)
     if "id" in body:
         response["id"] = body["id"]
     return response
